@@ -1,10 +1,12 @@
 package com.group15.toq_o.present;
 
 import android.app.Activity;
-import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.view.View;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.Toast;
 
@@ -15,8 +17,6 @@ import com.qualcomm.toq.smartwatch.api.v1.deckofcards.remote.DeckOfCardsManager;
 import com.qualcomm.toq.smartwatch.api.v1.deckofcards.remote.RemoteDeckOfCards;
 import com.qualcomm.toq.smartwatch.api.v1.deckofcards.remote.RemoteDeckOfCardsException;
 import com.qualcomm.toq.smartwatch.api.v1.deckofcards.remote.RemoteResourceStore;
-import com.qualcomm.toq.smartwatch.api.v1.deckofcards.resource.CardImage;
-import com.qualcomm.toq.smartwatch.api.v1.deckofcards.resource.DeckOfCardsLauncherIcon;
 
 import java.util.ArrayList;
 
@@ -27,9 +27,15 @@ public class ViewFilesActivity extends Activity {
     ListView list;
     PptListAdapter adapter;
     private DeckOfCardsManager mDeckOfCardsManager;
-    private RemoteDeckOfCards mRemoteDeckOfCards;
     private RemoteResourceStore mRemoteResourceStore;
-    private ToqBroadcastReceiver toqReceiver;
+    private ChangeSlidesListener mChangeSlidesListener = new ChangeSlidesListener(this);
+    ListItemInfo current;
+    RemoteDeckOfCards mRemoteDeckOfCards;
+
+    private class ListItemInfo {
+        int position;
+        View view;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,18 +46,19 @@ public class ViewFilesActivity extends Activity {
         //get list of ppt + put into list
         PresentApplication app = (PresentApplication) getApplication();
         pptList = new ArrayList<Presentation>(app.getPresentationHashMap().values());
+        current = null;
         Resources res = getResources();
         list = (ListView) findViewById(R.id.list);
         adapter = new PptListAdapter(this, pptList, res);
         list.setAdapter(adapter);
         //init watch objects
-        toqReceiver = new ToqBroadcastReceiver();
         mDeckOfCardsManager = DeckOfCardsManager.getInstance(getApplicationContext());
-        toqReceiver = new ToqBroadcastReceiver();
+        mDeckOfCardsManager.addDeckOfCardsEventListener(mChangeSlidesListener);
     }
 
     @Override
     protected void onStart() {
+        super.onStart();
         if (!mDeckOfCardsManager.isConnected()){
             try{
                 mDeckOfCardsManager.connect();
@@ -62,12 +69,50 @@ public class ViewFilesActivity extends Activity {
         }
     }
 
-    public void onItemClick(int position) {
+    public void onItemClick(int position, View view) {
         Presentation tempValues = pptList.get(position);
-        System.out.println(tempValues.getName() + " " + position);
+        ImageView radioButton = radioButton = (ImageView) view.findViewById(R.id.radio_button);
+        if (current != null) {
+            ImageView previous = (ImageView) current.view.findViewById(R.id.radio_button);
+            previous.setImageResource(R.drawable.empty_radio);
+        }
+        current = new ListItemInfo();
+        current.view = view;
+        current.position = position;
+        radioButton.setImageResource(R.drawable.full_radio);
+        boolean canSync = tempValues.isCanSync();
+        ImageButton button = (ImageButton) findViewById(R.id.watchButton);
+        if (canSync) {
+            button.setImageResource(R.drawable.active_next);
+        } else {
+            button.setImageResource(R.drawable.disable_next);
+        }
     }
 
-    public void onInstall(View view) {
+    public void downloadToWatch(View view) {
+        int position = current.position;
+        Presentation ppt = pptList.get(position);
+        if (!ppt.isCanSync()) {
+            return;
+        }
+        //install messages to watch
+        mRemoteDeckOfCards = createDeckOfCards(pptList.get(position));
+        try {
+            if (!mDeckOfCardsManager.isInstalled()) {
+                install(view);
+                mDeckOfCardsManager.installDeckOfCards(mRemoteDeckOfCards, mRemoteResourceStore);
+            }
+            mDeckOfCardsManager.updateDeckOfCards(mRemoteDeckOfCards, mRemoteResourceStore);
+        } catch(Exception e) {
+            //should not fail
+            e.printStackTrace();
+        }
+        //switch xml views
+        //RelativeLayout layoutRight = (RelativeLayout) ((LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE)).inflate(R.layout.activity_sync_complete, null);
+        setContentView(R.layout.activity_sync_complete);
+    }
+
+    public void install(View view) {
         boolean isInstalled = false;
 
         try {
@@ -79,13 +124,14 @@ public class ViewFilesActivity extends Activity {
         }
 
         if (!isInstalled) {
-            try {
+            init();
+            /*try {
                 init();
                 mDeckOfCardsManager.installDeckOfCards(mRemoteDeckOfCards, mRemoteResourceStore);
             } catch (RemoteDeckOfCardsException e) {
                 e.printStackTrace();
                 Toast.makeText(this, "Error: Cannot install application", Toast.LENGTH_SHORT).show();
-            }
+            }*/
         } else {
             Toast.makeText(this, "App is already installed!", Toast.LENGTH_SHORT).show();
         }
@@ -93,9 +139,7 @@ public class ViewFilesActivity extends Activity {
         try {
             Thread.sleep(5000);
             if(mDeckOfCardsManager.isInstalled()) {
-                Intent intent = new Intent(getApplicationContext(),
-                        LocatorService.class);
-                startService(intent);
+                //startService(intent);
             } else {
                 System.out.println("error installing deck");
             }
@@ -105,54 +149,115 @@ public class ViewFilesActivity extends Activity {
     }
 
     private void init(){
-
-        // Create the resource store for icons and images
         mRemoteResourceStore= new RemoteResourceStore();
-
-        DeckOfCardsLauncherIcon whiteIcon = null;
-        DeckOfCardsLauncherIcon colorIcon = null;
-
-        // Get the launcher icons
-        try{
-            whiteIcon= new DeckOfCardsLauncherIcon("white.launcher.icon", getBitmap("bw.png"), DeckOfCardsLauncherIcon.WHITE);
-            colorIcon= new DeckOfCardsLauncherIcon("color.launcher.icon", getBitmap("color.png"), DeckOfCardsLauncherIcon.COLOR);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            System.out.println("Can't get launcher icon");
-            return;
-        }
-
-        // Try to retrieve a stored deck of cards
-        try {
-            // If there is no stored deck of cards or it is unusable, then create new and store
-            mRemoteDeckOfCards = createDeckOfCards();
-        }
-        catch (Throwable th){
-            th.printStackTrace();
-            mRemoteDeckOfCards = null; // Reset to force recreate
-        }
-
-        // Make sure in usable state
-        if (mRemoteDeckOfCards == null){
-            mRemoteDeckOfCards = createDeckOfCards();
-        }
-
-        // Set the custom launcher icons, adding them to the resource store
-        mRemoteDeckOfCards.setLauncherIcons(mRemoteResourceStore, new DeckOfCardsLauncherIcon[]{whiteIcon, colorIcon});
     }
+    //blue first, then green slide
 
-    private RemoteDeckOfCards createDeckOfCards() {
+    private RemoteDeckOfCards createDeckOfCards(Presentation ppt) {
         //create deck of cards based on slides and messages
         System.out.println("creating cards");
         ListCard listCard= new ListCard();
-        /*addStartingSimpleTextCard("jack_weinberg_toq.png", "Jack Weinberg", "Draw Text: FSM", listCard);
-        addStartingSimpleTextCard("joan_baez_toq.png", "Joan Baez", "Draw Megaphone", listCard);
-        addStartingSimpleTextCard("michael_rossman_toq.png", "Michael Rossman", "Draw Text: Free Speech", listCard);
-        addStartingSimpleTextCard("art_goldberg_toq.png", "Art Goldberg", "Draw Text: Now", listCard);
-        addStartingSimpleTextCard("jackie_goldberg_toq.png", "Jackie Goldberg", "Draw Text: SLATE", listCard);
-        addStartingSimpleTextCard("mario_savio_toq.png", "Mario Savio", "Draw FSM", listCard);*/
+        int numSlides = ppt.numSlides();
+        ppt.updatePosition(-1);
+        SimpleTextCard card = new SimpleTextCard(ppt.getId());
+        updateCardFromMessage(card, ppt.getId(), -1, "");
+        if (!card.isReceivingEvents()) {
+            card.setReceivingEvents(true);
+        }
+        listCard.add(card);
+        //addStartingSimpleTextCard("jack_weinberg_toq.png", "Jack Weinberg", "Draw Text: FSM", listCard);
         return new RemoteDeckOfCards(this, listCard);
+    }
+
+    private void updateCardFromMessage(SimpleTextCard card, String id, int slideNum, String message) {
+        //Create a SimpleTextCard with id being pptId_slideNum
+        if (card == null) {
+            return;
+        }
+        String[] messages = new String[2];
+        if (slideNum == -1) {
+            messages[0] = "Start";
+        }
+        if (slideNum == 0) {
+            messages[0] = "Introduction";
+            messages[1] = "1/3";
+        }
+        if (slideNum == 1) {
+            messages[0] = "Pre-attentive retain";
+            messages[1] = "2/3";
+        }
+        if (slideNum == 2) {
+            messages[0] = "Maintenance Rehearsal";
+            messages[1] = "3/3";
+        }
+        //messages[0] = String.valueOf(slideNum);
+        card.setMessageText(messages);
+        Presentation ppt = pptList.get(current.position);
+        String[] menuOption;
+        if (slideNum == -1) {
+            menuOption = new String[1];
+            menuOption[0] = "Begin";
+        } else if (slideNum == 0) {
+            menuOption = new String[1];
+            menuOption[0] = "Next";
+        } else if (slideNum == ppt.numSlides() -1) {
+            menuOption = new String[1];
+            menuOption[0] = "Previous";
+        } else {
+            menuOption = new String[2];
+            menuOption[0] = "Next";
+            menuOption[1] = "Previous";
+        }
+        card.setMenuOptions(menuOption);
+        card.setReceivingEvents(true);
+    }
+
+    void updateCard(String id, String menu) {
+        ListCard listCard = mRemoteDeckOfCards.getListCard();
+        SimpleTextCard card = (SimpleTextCard) listCard.get(0);
+        Presentation ppt = pptList.get(current.position);
+        int pos = ppt.getPosition();
+        if (menu.equals("Previous")) {
+            //go to previous slide
+            int slideNumber = pos - 1;
+            if (slideNumber >= 0) {
+                updateCardFromMessage(card, id, slideNumber, String.valueOf(slideNumber));
+                ppt.updatePosition(slideNumber);
+            }
+        } else {
+            //go to next slide
+            int slideNumber = pos + 1;
+            System.out.println(slideNumber);
+            if (slideNumber < ppt.numSlides()) {
+                updateCardFromMessage(card, id, slideNumber, String.valueOf(slideNumber));
+                ppt.updatePosition(slideNumber);
+            }
+        }
+        try {
+            mDeckOfCardsManager.updateDeckOfCards(mRemoteDeckOfCards, mRemoteResourceStore);
+        } catch (RemoteDeckOfCardsException e) {
+            //shouldn't reach this
+        }
+    }
+
+    void updateImage(String id, String menu) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                ImageView img = (ImageView) findViewById(R.id.image);
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                int position = pptList.get(current.position).getPosition();
+                if(position == 0) {
+                    img.setImageResource(R.drawable.human_models);
+                }
+                if(position == 1) {
+                    img.setImageResource(R.drawable.slide2);
+                }
+                if(position == 2) {
+                    img.setImageResource(R.drawable.slide1);
+                }
+            }
+        });
     }
 
     /*private void addStartingSimpleTextCard(String filename, String name, String drawing, ListCard listCard) {
@@ -161,6 +266,7 @@ public class ViewFilesActivity extends Activity {
         // Create a SimpleTextCard with 1 + the current number of SimpleTextCards
         SimpleTextCard simpleTextCard = new SimpleTextCard(Integer.toString(currSize+1));
 
+        //add image to card
         CardImage image = null;
         try {
             image = new CardImage(filename, getBitmap(filename));
@@ -170,6 +276,8 @@ public class ViewFilesActivity extends Activity {
         }
         mRemoteResourceStore.addResource(image);
         simpleTextCard.setCardImage(mRemoteResourceStore, image);
+
+        //add message to card
         String[] messages = new String[2];
         messages[0] = name;
         messages[1] = drawing;

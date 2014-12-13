@@ -31,7 +31,6 @@ public class PptListAdapter extends BaseAdapter implements OnClickListener {
         data=d;
         res = resLocal;
         listItem = null;
-        /***********  Layout inflator to call external xml layout () ***********/
         inflater = ( LayoutInflater )activity.
                 getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
@@ -52,27 +51,20 @@ public class PptListAdapter extends BaseAdapter implements OnClickListener {
         return position;
     }
 
-    /********* Create a holder Class to contain inflated xml file elements *********/
     public static class ViewHolder{
-
         public TextView text;
-        public ImageView image;
-        public ImageView arrow;
-
+        //public ImageView image;
+        public ImageView radioButton;
     }
 
     public View getView(int position, View convertView, ViewGroup parent) {
-
         View vi = convertView;
         ViewHolder holder;
-
         if(convertView == null) {
             vi = inflater.inflate(R.layout.pptitem, null);
-
             holder = new ViewHolder();
             holder.text = (TextView) vi.findViewById(R.id.name);
-            holder.image = (ImageView) vi.findViewById(R.id.image);
-            holder.arrow = (ImageView) vi.findViewById(R.id.arrow);
+            holder.radioButton = (ImageView) vi.findViewById(R.id.radio_button);
             vi.setTag(holder);
         }
         else {
@@ -85,8 +77,7 @@ public class PptListAdapter extends BaseAdapter implements OnClickListener {
             listItem = (Presentation) data.get(position);
             String name = listItem.getName();
             holder.text.setText(name);
-            holder.image.setImageBitmap(listItem.getSlide(1).getImg());
-            holder.arrow.setImageResource(R.drawable.right_arrow);
+            holder.radioButton.setImageResource(R.drawable.empty_radio);
             vi.setOnClickListener(new OnItemClickListener(position));
         }
         return vi;
@@ -107,9 +98,8 @@ public class PptListAdapter extends BaseAdapter implements OnClickListener {
         @Override
         public void onClick(View arg0) {
 
-
             ViewFilesActivity sct = (ViewFilesActivity)activity;
-            sct.onItemClick(mPosition);
+            sct.onItemClick(mPosition, arg0);
         }
     }
 }

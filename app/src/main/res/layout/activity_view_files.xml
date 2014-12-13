@@ -2,12 +2,27 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/watch_static"
+    android:orientation="vertical"
     tools:context="com.group15.toq_o.present.ViewFilesActivity">
 
     <ListView
         android:id="@+id/list"
         android:layout_width="fill_parent"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"/>
+        android:layout_height="fill_parent"
+        android:paddingTop="200dp"
+        android:layout_weight="1"
+        android:layout_above="@+id/watchButton"
+        android:divider="#00000000"/>
+
+    <ImageButton
+        android:layout_width="80dp"
+        android:layout_height="80dp"
+        android:id="@+id/watchButton"
+        android:src="@drawable/disable_next"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentEnd="true"
+        android:onClick="downloadToWatch"/>
 
 </RelativeLayout>

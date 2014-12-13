@@ -28,8 +28,12 @@ public class Presentation {
     String name;
     DateTime lastModified;
     String id;
+    Bitmap firstSlide;
+    int position;
+    boolean canSync;
 
     public Presentation(String name, String filename, DateTime date, String id) {
+        position = -1;
         try {
             File file = new File(Environment.getExternalStorageDirectory().getPath() + "/pdf", filename);
             FileInputStream stream = new FileInputStream(file);
@@ -44,12 +48,45 @@ public class Presentation {
             this.name = name;
             lastModified = date;
             this.id = id;
+            //firstSlide = getSlide(1).getImg();
+            canSync = false;
         } catch(Exception e) {
             //do nothing
             System.out.println("should have no errors");
             //e.printStackTrace();
         }
     }
+
+    //for creating mocks
+    public Presentation(String name, String filename, DateTime date, String id, int length) {
+        position = -1;
+        try {
+            //create pdf document object from bytes
+            this.filename = filename;
+            messages = new String[length];
+            this.name = name;
+            lastModified = date;
+            this.id = id;
+            firstSlide = getSlide(1).getImg();
+            canSync = false;
+        } catch(Exception e) {
+            //do nothing
+            System.out.println("should have no errors");
+            //e.printStackTrace();
+        }
+    }
+
+    public boolean isCanSync() { return canSync; }
+
+    public void setCanSync(boolean bool) { this.canSync = bool; }
+
+    public void updatePosition(int position) { this.position = position; }
+
+    public int getPosition() { return position; }
+
+    public Bitmap getPhoto() { return firstSlide; }
+
+    public int numSlides() { return messages.length; }
 
     public String getFilename() {
         return filename;
@@ -66,6 +103,8 @@ public class Presentation {
     public DateTime getLastModified() {
         return lastModified;
     }
+
+    public String getSlideMessage(int slideNumber) { return messages[slideNumber]; }
 
     public Slide getSlide(int slideNumber) throws IndexOutOfBoundsException {
         if (filename == null) {
